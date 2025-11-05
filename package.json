@@ -1,6 +1,6 @@
 {
   "name": "vercel-socks5-reverse-proxy",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Reverse proxy API for Vercel with optional SOCKS5 and API key protection",
   "main": "api/proxy.js",
   "scripts": {
