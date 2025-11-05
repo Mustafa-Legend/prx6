@@ -1,60 +1,86 @@
-import axios from "axios";
-import { SocksProxyAgent } from "socks-proxy-agent";
+proxy_js = """const axios = require('axios');
+const { SocksProxyAgent } = require('socks-proxy-agent');
+const { URL } = require('url');
 
-export const config = {
-  maxDuration: 10,
+const createAgentIfNeeded = () => {
+  const upstream = process.env.UPSTREAM_SOCKS5 || null;
+  if (!upstream) return null;
+  return new SocksProxyAgent(upstream);
 };
 
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+const isAllowedHost = (hostname) => {
+  const raw = process.env.ALLOWED_HOSTS || '';
+  if (!raw) return true;
+  const list = raw.split(',').map(s => s.trim()).filter(Boolean);
+  return list.includes(hostname);
+};
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+const agent = createAgentIfNeeded();
 
-  const targetUrl = req.query.url;
-  if (!targetUrl) return res.status(400).json({ error: "Missing ?url parameter" });
-
+module.exports = async (req, res) => {
   try {
-    // إعداد SOCKS5 (اختياري)
-    // const agent = new SocksProxyAgent("socks5://user:pass@host:port");
+    res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-API-KEY');
+    if (req.method === 'OPTIONS') return res.status(204).end();
 
-    const response = await axios.get(targetUrl, {
-      // httpsAgent: agent,
-      responseType: "arraybuffer",
-      headers: {
-        "User-Agent": req.headers["user-agent"] || "Mozilla/5.0",
-        "Accept-Encoding": "identity", // تجنب gzip لتفادي مشاكل فك الضغط
-      },
-      timeout: 8000,
-    });
-
-    const contentType = response.headers["content-type"] || "text/plain";
-
-    // ✨ تعديل HTML فقط
-    if (contentType.includes("text/html")) {
-      let html = Buffer.from(response.data).toString("utf-8");
-      const baseUrl = new URL(targetUrl).origin;
-
-      html = html
-        // تعديل الروابط المطلقة والنسبية
-        .replace(/(href|src)=["'](?!https?:|\/\/)([^"']+)["']/gi, (m, attr, path) => {
-          const abs = new URL(path, baseUrl).href;
-          return `${attr}="/api/proxy?url=${abs}"`;
-        })
-        .replace(/(href|src)=["'](https?:\/\/[^"']+)["']/gi, (m, attr, fullUrl) => {
-          return `${attr}="/api/proxy?url=${fullUrl}"`;
-        });
-
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.status(200).send(html);
+    const requiredKey = process.env.API_KEY;
+    if (requiredKey) {
+      const clientKey = req.headers['x-api-key'];
+      if (!clientKey || clientKey !== requiredKey) {
+        return res.status(403).json({ error: 'Invalid or missing API key' });
+      }
     }
 
-    // الملفات غير النصية (CSS, JS, صور...)
-    res.setHeader("Content-Type", contentType);
+    const targetUrl = req.query.url || req.headers['x-target-url'];
+    if (!targetUrl) return res.status(400).json({ error: 'Missing target URL (?url=)' });
+
+    let parsed;
+    try {
+      parsed = new URL(targetUrl);
+    } catch {
+      return res.status(400).json({ error: 'Invalid target URL' });
+    }
+
+    if (!isAllowedHost(parsed.hostname)) {
+      return res.status(403).json({ error: 'Host not allowed by ALLOWED_HOSTS' });
+    }
+
+    const forwardHeaders = { ...req.headers };
+    delete forwardHeaders.host;
+    delete forwardHeaders['x-forwarded-for'];
+    delete forwardHeaders['x-api-key'];
+
+    const axiosOptions = {
+      method: req.method,
+      url: targetUrl,
+      headers: forwardHeaders,
+      data: req.body || undefined,
+      responseType: 'arraybuffer',
+      validateStatus: () => true
+    };
+
+    if (agent) {
+      axiosOptions.httpAgent = agent;
+      axiosOptions.httpsAgent = agent;
+    }
+
+    const response = await axios(axiosOptions);
+
+    const excludedHeaders = [
+      'connection', 'keep-alive', 'proxy-authenticate',
+      'proxy-authorization', 'te', 'trailer',
+      'transfer-encoding', 'upgrade'
+    ];
+    Object.entries(response.headers || {}).forEach(([k, v]) => {
+      if (!excludedHeaders.includes(k.toLowerCase())) {
+        res.setHeader(k, v);
+      }
+    });
+
     res.status(response.status).send(Buffer.from(response.data));
   } catch (err) {
-    console.error("Proxy error:", err.message);
-    res.status(500).json({ error: "Proxy failed", details: err.message });
+    console.error('Proxy error:', err.message);
+    res.status(502).json({ error: 'Upstream request failed', detail: err.message });
   }
-}
+};
