@@ -1,83 +1,54 @@
-const axios = require('axios');
-const { SocksProxyAgent } = require('socks-proxy-agent');
-const { URL } = require('url');
+import axios from "axios";
+import { SocksProxyAgent } from "socks-proxy-agent";
 
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-const createAgentIfNeeded = () => {
-  const upstream = process.env.UPSTREAM_SOCKS5 || null;
-  if (!upstream) return null;
-  return new SocksProxyAgent(upstream);
-};
+  if (req.method === "OPTIONS") return res.status(200).end();
 
-const isAllowedHost = (hostname) => {
-  const raw = process.env.ALLOWED_HOSTS || '';
-  if (!raw) return true;
-  const list = raw.split(',').map(s => s.trim()).filter(Boolean);
-  return list.includes(hostname);
-};
+  const targetUrl = req.query.url;
+  if (!targetUrl) return res.status(400).json({ error: "Missing ?url parameter" });
 
-
-const agent = createAgentIfNeeded();
-
-module.exports = async (req, res) => {
   try {
-    res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-API-KEY');
-    if (req.method === 'OPTIONS') return res.status(204).end();
+    // إعداد SOCKS5 (اختياري)
+    // const agent = new SocksProxyAgent("socks5://user:pass@host:port");
 
-    // API KEY CHECK REMOVED - No authentication required
-    
-    const targetUrl = req.query.url || req.headers['x-target-url'];
-    if (!targetUrl) return res.status(400).json({ error: 'Missing target URL (?url=)' });
-
-    let parsed;
-    try {
-      parsed = new URL(targetUrl);
-    } catch {
-      return res.status(400).json({ error: 'Invalid target URL' });
-    }
-
-    if (!isAllowedHost(parsed.hostname)) {
-      return res.status(403).json({ error: 'Host not allowed by ALLOWED_HOSTS' });
-    }
-
-    const forwardHeaders = { ...req.headers };
-    delete forwardHeaders.host;
-    delete forwardHeaders['x-forwarded-for'];
-    delete forwardHeaders['x-api-key']; 
-    
-
-    const axiosOptions = {
-      method: req.method,
-      url: targetUrl,
-      headers: forwardHeaders,
-      data: req.body || undefined,
-      responseType: 'arraybuffer',
-      validateStatus: () => true
-    };
-
-    if (agent) {
-      axiosOptions.httpAgent = agent;
-      axiosOptions.httpsAgent = agent;
-    }
-
-    const response = await axios(axiosOptions);
-
-    const excludedHeaders = [
-      'connection', 'keep-alive', 'proxy-authenticate',
-      'proxy-authorization', 'te', 'trailer',
-      'transfer-encoding', 'upgrade'
-    ];
-    Object.entries(response.headers || {}).forEach(([k, v]) => {
-      if (!excludedHeaders.includes(k.toLowerCase())) {
-        res.setHeader(k, v);
-      }
+    const response = await axios.get(targetUrl, {
+      // httpsAgent: agent, // فعّل هذا السطر إن أردت بروكسي
+      responseType: "arraybuffer",
+      headers: {
+        "User-Agent": req.headers["user-agent"] || "Mozilla/5.0",
+      },
     });
 
-    res.status(response.status).send(Buffer.from(response.data));
+    let contentType = response.headers["content-type"] || "text/plain";
+
+    // 🧠 تعديل الروابط داخل صفحات HTML فقط
+    if (contentType.includes("text/html")) {
+      let html = response.data.toString("utf-8");
+
+      const baseUrl = new URL(targetUrl).origin;
+
+      // تعديل جميع الروابط
+      html = html
+        .replace(/(href|src)=["'](?!https?:|\/\/)([^"']+)["']/gi, (match, attr, path) => {
+          const absoluteUrl = new URL(path, baseUrl).href;
+          return `${attr}="/api/proxy?url=${absoluteUrl}"`;
+        })
+        .replace(/(href|src)=["'](https?:\/\/[^"']+)["']/gi, (match, attr, fullUrl) => {
+          return `${attr}="/api/proxy?url=${fullUrl}"`;
+        });
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(200).send(html);
+    }
+
+    // الملفات الأخرى (CSS, JS, صور، الخ)
+    res.setHeader("Content-Type", contentType);
+    res.status(response.status).send(response.data);
   } catch (err) {
-    console.error('Proxy error:', err.message);
-    res.status(502).json({ error: 'Upstream request failed', detail: err.message });
+    res.status(500).json({ error: err.message });
   }
-};
+}
