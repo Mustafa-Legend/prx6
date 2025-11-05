@@ -52,14 +52,8 @@ module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-API-KEY');
     if (req.method === 'OPTIONS') return res.status(204).end();
 
-    const requiredKey = process.env.API_KEY;
-    if (requiredKey) {
-      const clientKey = req.headers['mysecret123'];
-      if (!clientKey || clientKey !== requiredKey) {
-        return res.status(403).json({ error: 'Invalid or missing API key' });
-      }
-    }
-
+    // API KEY CHECK REMOVED - No authentication required
+    
     const targetUrl = req.query.url || req.headers['x-target-url'];
     if (!targetUrl) return res.status(400).json({ error: 'Missing target URL (?url=)' });
 
@@ -77,7 +71,7 @@ module.exports = async (req, res) => {
     const forwardHeaders = { ...req.headers };
     delete forwardHeaders.host;
     delete forwardHeaders['x-forwarded-for'];
-    delete forwardHeaders['x-api-key'];
+    delete forwardHeaders['x-api-key']; // Still remove if present
     
     // Add random user agent if no user-agent header is present
     if (!forwardHeaders['user-agent']) {
