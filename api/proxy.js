@@ -54,7 +54,7 @@ module.exports = async (req, res) => {
 
     const requiredKey = process.env.API_KEY;
     if (requiredKey) {
-      const clientKey = req.headers['x-api-key'];
+      const clientKey = req.headers['mysecret123'];
       if (!clientKey || clientKey !== requiredKey) {
         return res.status(403).json({ error: 'Invalid or missing API key' });
       }
