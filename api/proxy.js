@@ -4,7 +4,7 @@ const { URL } = require('url');
 
 // Configure axios with better defaults for serverless
 const axiosInstance = axios.create({
-  timeout: 10000, // 10 second timeout
+  timeout: 100000, // 10 second timeout
   maxContentLength: 10485760, // 10MB limit
   maxBodyLength: 10485760,
   validateStatus: () => true
