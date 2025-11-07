@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { SocksProxyAgent } = require('socks-proxy-agent');
+const { URL } = require('url');
 
 // Configure axios with better defaults for serverless
 const axiosInstance = axios.create({
@@ -23,6 +24,105 @@ const isAllowedHost = (hostname) => {
 };
 
 const agent = createAgentIfNeeded();
+
+// دالة لتحويل روابط Proxy إلى روابط مباشرة
+const convertProxyToDirect = (proxyUrl, baseDomain = 'https://prx8.vercel.app') => {
+  try {
+    // إذا كانت الرابط ليس رابط proxy، تركه كما هو
+    if (!proxyUrl.includes('/api/proxy?url=')) {
+      return proxyUrl;
+    }
+    
+    // استخراج الرابط الأصلي من رابط الـ proxy
+    const urlObj = new URL(proxyUrl, baseDomain);
+    const originalUrl = urlObj.searchParams.get('url');
+    
+    if (originalUrl) {
+      return decodeURIComponent(originalUrl);
+    }
+    
+    return proxyUrl;
+  } catch {
+    return proxyUrl;
+  }
+};
+
+// دالة لمعالجة HTML وتحويل روابط Proxy إلى روابط مباشرة
+const processHtmlContent = (html, baseDomain) => {
+  let processedHtml = html;
+  
+  // تحويل روابط CSS من Proxy إلى مباشر
+  processedHtml = processedHtml.replace(/<link([^>]*?)href=(["'])(.*?)\2/gi, (match, attrs, quote, href) => {
+    if (href) {
+      const directUrl = convertProxyToDirect(href, baseDomain);
+      return `<link${attrs}href=${quote}${directUrl}${quote}`;
+    }
+    return match;
+  });
+  
+  // تحويل روابط الصور من Proxy إلى مباشر
+  processedHtml = processedHtml.replace(/<img([^>]*?)src=(["'])(.*?)\2/gi, (match, attrs, quote, src) => {
+    if (src) {
+      const directUrl = convertProxyToDirect(src, baseDomain);
+      return `<img${attrs}src=${quote}${directUrl}${quote}`;
+    }
+    return match;
+  });
+  
+  // تحويل روابط JavaScript من Proxy إلى مباشر
+  processedHtml = processedHtml.replace(/<script([^>]*?)src=(["'])(.*?)\2/gi, (match, attrs, quote, src) => {
+    if (src) {
+      const directUrl = convertProxyToDirect(src, baseDomain);
+      return `<script${attrs}src=${quote}${directUrl}${quote}`;
+    }
+    return match;
+  });
+  
+  // تحويل روابط srcset
+  processedHtml = processedHtml.replace(/srcset=(["'])(.*?)\1/gi, (match, quote, srcset) => {
+    const newSrcset = srcset.split(',').map(part => {
+      const trimmed = part.trim();
+      const url = trimmed.split(/\s+/)[0];
+      if (url) {
+        const directUrl = convertProxyToDirect(url, baseDomain);
+        return trimmed.replace(url, directUrl);
+      }
+      return trimmed;
+    }).join(', ');
+    return `srcset=${quote}${newSrcset}${quote}`;
+  });
+  
+  // تحويل روابط الفيديو والصوت
+  processedHtml = processedHtml.replace(/<source([^>]*?)src=(["'])(.*?)\2/gi, (match, attrs, quote, src) => {
+    if (src) {
+      const directUrl = convertProxyToDirect(src, baseDomain);
+      return `<source${attrs}src=${quote}${directUrl}${quote}`;
+    }
+    return match;
+  });
+  
+  // تحويل روابط الـ favicon
+  processedHtml = processedHtml.replace(/<link([^>]*?)rel=(["'])[^"']*icon[^"']*\2([^>]*?)href=(["'])(.*?)\4/gi, (match, attrs1, quote1, attrs2, quote2, href) => {
+    if (href) {
+      const directUrl = convertProxyToDirect(href, baseDomain);
+      return `<link${attrs1}rel=${quote1}icon${quote1}${attrs2}href=${quote2}${directUrl}${quote2}`;
+    }
+    return match;
+  });
+  
+  return processedHtml;
+};
+
+// دالة لمعالجة محتوى CSS
+const processCssContent = (css, baseDomain) => {
+  return css.replace(/url\((['"]?)(.*?)\1\)/gi, (match, quote, url) => {
+    if (url && !url.startsWith('data:') && !url.startsWith('#') && !url.startsWith('blob:')) {
+      const directUrl = convertProxyToDirect(url, baseDomain);
+      return `url(${quote}${directUrl}${quote})`;
+    }
+    return match;
+  });
+};
 
 module.exports = async (req, res) => {
   // Immediate response for OPTIONS
@@ -67,7 +167,7 @@ module.exports = async (req, res) => {
       url: targetUrl,
       headers: forwardHeaders,
       data: req.body,
-      responseType: 'stream', // Stream response to avoid memory issues
+      responseType: 'arraybuffer', // Changed back to arraybuffer for content processing
       timeout: 8000, // Slightly less than function timeout
       httpAgent: agent,
       httpsAgent: agent
@@ -79,6 +179,36 @@ module.exports = async (req, res) => {
     }
 
     const response = await axiosInstance(axiosOptions);
+
+    const contentType = response.headers['content-type'] || '';
+    let responseData = response.data;
+
+    // إذا كان المحتوى HTML، قم بمعالجته لتحويل روابط Proxy إلى مباشرة
+    if (contentType.includes('text/html')) {
+      try {
+        const htmlContent = Buffer.from(responseData).toString('utf8');
+        const processedHtml = processHtmlContent(htmlContent, 'https://prx8.vercel.app');
+        responseData = Buffer.from(processedHtml, 'utf8');
+        
+        // تحديث طول المحتوى بعد المعالجة
+        response.headers['content-length'] = Buffer.byteLength(responseData);
+      } catch (htmlError) {
+        console.error('Error processing HTML:', htmlError.message);
+        // استمر بالمحتوى الأصلي في حالة الخطأ
+      }
+    }
+
+    // إذا كان المحتوى CSS، قم بمعالجة روابط url()
+    if (contentType.includes('text/css')) {
+      try {
+        const cssContent = Buffer.from(responseData).toString('utf8');
+        const processedCss = processCssContent(cssContent, 'https://prx8.vercel.app');
+        responseData = Buffer.from(processedCss, 'utf8');
+        response.headers['content-length'] = Buffer.byteLength(responseData);
+      } catch (cssError) {
+        console.error('Error processing CSS:', cssError.message);
+      }
+    }
 
     // Set response headers
     const excludedHeaders = [
@@ -93,10 +223,7 @@ module.exports = async (req, res) => {
       }
     });
 
-    res.status(response.status);
-    
-    // Stream the response instead of buffering
-    response.data.pipe(res);
+    res.status(response.status).send(responseData);
 
   } catch (err) {
     console.error('Proxy error:', err.message);
