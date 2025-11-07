@@ -36,15 +36,8 @@ module.exports = async (req, res) => {
   try {
     res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
 
-    // API Key validation
-    const requiredKey = process.env.API_KEY;
-    if (requiredKey) {
-      const clientKey = req.headers['x-api-key'];
-      if (!clientKey || clientKey !== requiredKey) {
-        return res.status(403).json({ error: 'Invalid or missing API key' });
-      }
-    }
-
+    // 🚫 API KEY VALIDATION REMOVED - No authentication required
+    
     // URL validation
     const targetUrl = req.query.url || req.headers['x-target-url'];
     if (!targetUrl) {
@@ -66,7 +59,7 @@ module.exports = async (req, res) => {
     const forwardHeaders = { ...req.headers };
     delete forwardHeaders.host;
     delete forwardHeaders['x-forwarded-for'];
-    delete forwardHeaders['x-api-key'];
+    delete forwardHeaders['x-api-key']; // Still remove if sent, but don't validate
     delete forwardHeaders['content-length']; // Let axios calculate this
 
     const axiosOptions = {
