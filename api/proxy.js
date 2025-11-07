@@ -11,9 +11,16 @@ const axiosInstance = axios.create({
 });
 
 const createAgentIfNeeded = () => {
-  const upstream = process.env.UPSTREAM_SOCKS5 || null;
+  // البروكسي المضاف - socks5://gw.dataimpulse.com:824:59b29a23f8bc3ce6bb65__cr.au,us:93aa23f81ee1080e
+  const upstream = process.env.UPSTREAM_SOCKS5 || 'socks5://gw.dataimpulse.com:824:59b29a23f8bc3ce6bb65__cr.au,us:93aa23f81ee1080e';
   if (!upstream) return null;
-  return new SocksProxyAgent(upstream);
+  
+  try {
+    return new SocksProxyAgent(upstream);
+  } catch (error) {
+    console.error('Error creating SOCKS5 agent:', error.message);
+    return null;
+  }
 };
 
 const isAllowedHost = (hostname) => {
