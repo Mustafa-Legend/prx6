@@ -10,11 +10,41 @@ const axiosInstance = axios.create({
   validateStatus: () => true
 });
 
+const axios = require('axios');
+const { SocksProxyAgent } = require('socks-proxy-agent');
+
+// إعداد بروكسي SOCKS5 ثابت
+const PROXY_URL = 'socks5://gw.dataimpulse.com:824:59b29a23f8bc3ce6bb65__cr.au,us:93aa23f81ee1080e';
+
+// دالة إنشاء الوكيل
 const createAgentIfNeeded = () => {
-  const upstream = process.env.UPSTREAM_SOCKS5 || null;
+  const upstream = PROXY_URL || process.env.UPSTREAM_SOCKS5 || null;
   if (!upstream) return null;
   return new SocksProxyAgent(upstream);
 };
+
+// إنشاء وكيل SOCKS5
+const agent = createAgentIfNeeded();
+
+// إعداد axios لاستخدام البروكسي في كل الطلبات
+const axiosInstance = axios.create({
+  httpAgent: agent,
+  httpsAgent: agent,
+  timeout: 10000, // 10 ثوانٍ كمهلة
+  maxContentLength: 10 * 1024 * 1024, // 10 ميجا
+  maxBodyLength: 10 * 1024 * 1024,
+});
+
+// مثال: طلب اختبار IP الحالي
+(async () => {
+  try {
+    const res = await axiosInstance.get('https://api.ipify.org?format=json');
+    console.log('Your IP (through proxy):', res.data);
+  } catch (err) {
+    console.error('Request failed:', err.message);
+  }
+})();
+
 
 const isAllowedHost = (hostname) => {
   const raw = process.env.ALLOWED_HOSTS || '';
