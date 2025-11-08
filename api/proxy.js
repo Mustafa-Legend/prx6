@@ -11,22 +11,9 @@ const axiosInstance = axios.create({
 });
 
 const createAgentIfNeeded = () => {
-  // البروكسي الثابت المطلوب
-  const upstream = 'socks5://gw.dataimpulse.com:824:59b29a23f8bc3ce6bb65__cr.au,us:93aa23f81ee1080e';
+  const upstream = process.env.UPSTREAM_SOCKS5 || null;
   if (!upstream) return null;
   return new SocksProxyAgent(upstream);
-};
-
-const fetchWithProxy = async (url, res) => {
-  try {
-    const agent = createAgentIfNeeded();
-    const response = await axios.get(url, { httpsAgent: agent, httpAgent: agent, timeout: 8000 });
-    return res.send(response.data);
-  } catch (error) {
-    console.error('❌ فشل الاتصال بالبروكسي، إعادة التوجيه إلى Google...');
-    // إعادة التوجيه إلى Google عند فشل البروكسي
-    return res.redirect('https://www.google.com');
-  }
 };
 
 const isAllowedHost = (hostname) => {
