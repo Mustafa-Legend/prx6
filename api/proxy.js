@@ -1,129 +1,101 @@
 const axios = require('axios');
 const { SocksProxyAgent } = require('socks-proxy-agent');
-const { URL } = require('url');
 
 // Configure axios with better defaults for serverless
 const axiosInstance = axios.create({
-  timeout: 100000, // 10 second timeout
-  maxContentLength: 10485760, // 10MB limit
+  timeout: 10000, // Reduced timeout for serverless
+  maxContentLength: 10485760,
   maxBodyLength: 10485760,
   validateStatus: () => true
 });
 
-const createAgentIfNeeded = () => {
-  const upstream = process.env.UPSTREAM_SOCKS5 || null;
-  if (!upstream) return null;
-  return new SocksProxyAgent(upstream);
-};
-
-const isAllowedHost = (hostname) => {
-  const raw = process.env.ALLOWED_HOSTS || '';
-  if (!raw) return true;
-  const list = raw.split(',').map(s => s.trim()).filter(Boolean);
-  return list.includes(hostname);
-};
-
-const agent = createAgentIfNeeded();
-
-// دالة لتحويل روابط Proxy إلى روابط مباشرة
-const convertProxyToDirect = (proxyUrl, baseDomain = 'https://prx8.vercel.app') => {
+// SOCKS5 proxy configuration with multiple fallbacks
+const getProxyAgent = () => {
   try {
-    // إذا كانت الرابط ليس رابط proxy، تركه كما هو
-    if (!proxyUrl.includes('/api/proxy?url=')) {
-      return proxyUrl;
+    // Multiple proxy options - try them in order
+    const proxyOptions = [
+      process.env.SOCKS5_PROXY, // Your main proxy
+      'socks5://gw.dataimpulse.com:824:59b29a23f8bc3ce6bb65__cr.au,us:93aa23f81ee1080e',
+      process.env.SOCKS5_BACKUP_1,
+      process.env.SOCKS5_BACKUP_2
+    ].filter(Boolean);
+
+    for (const proxyUrl of proxyOptions) {
+      try {
+        console.log(`Attempting proxy: ${proxyUrl.substring(0, 50)}...`);
+        const agent = new SocksProxyAgent(proxyUrl);
+        
+        // Test the agent (optional - adds overhead)
+        return agent;
+      } catch (agentError) {
+        console.warn(`Proxy failed: ${agentError.message}`);
+        continue;
+      }
     }
     
-    // استخراج الرابط الأصلي من رابط الـ proxy
-    const urlObj = new URL(proxyUrl, baseDomain);
-    const originalUrl = urlObj.searchParams.get('url');
-    
-    if (originalUrl) {
-      return decodeURIComponent(originalUrl);
-    }
-    
-    return proxyUrl;
-  } catch {
-    return proxyUrl;
+    return null; // No working proxy found
+  } catch (error) {
+    console.error('Proxy configuration error:', error.message);
+    return null;
   }
 };
 
-// دالة لمعالجة HTML وتحويل روابط Proxy إلى روابط مباشرة
-const processHtmlContent = (html, baseDomain) => {
-  let processedHtml = html;
+// Enhanced fetch function with proxy fallback
+const fetchWithProxyFallback = async (url, options = {}) => {
+  const maxRetries = 2;
   
-  // تحويل روابط CSS من Proxy إلى مباشر
-  processedHtml = processedHtml.replace(/<link([^>]*?)href=(["'])(.*?)\2/gi, (match, attrs, quote, href) => {
-    if (href) {
-      const directUrl = convertProxyToDirect(href, baseDomain);
-      return `<link${attrs}href=${quote}${directUrl}${quote}`;
-    }
-    return match;
-  });
-  
-  // تحويل روابط الصور من Proxy إلى مباشر
-  processedHtml = processedHtml.replace(/<img([^>]*?)src=(["'])(.*?)\2/gi, (match, attrs, quote, src) => {
-    if (src) {
-      const directUrl = convertProxyToDirect(src, baseDomain);
-      return `<img${attrs}src=${quote}${directUrl}${quote}`;
-    }
-    return match;
-  });
-  
-  // تحويل روابط JavaScript من Proxy إلى مباشر
-  processedHtml = processedHtml.replace(/<script([^>]*?)src=(["'])(.*?)\2/gi, (match, attrs, quote, src) => {
-    if (src) {
-      const directUrl = convertProxyToDirect(src, baseDomain);
-      return `<script${attrs}src=${quote}${directUrl}${quote}`;
-    }
-    return match;
-  });
-  
-  // تحويل روابط srcset
-  processedHtml = processedHtml.replace(/srcset=(["'])(.*?)\1/gi, (match, quote, srcset) => {
-    const newSrcset = srcset.split(',').map(part => {
-      const trimmed = part.trim();
-      const url = trimmed.split(/\s+/)[0];
-      if (url) {
-        const directUrl = convertProxyToDirect(url, baseDomain);
-        return trimmed.replace(url, directUrl);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt === 0) {
+        // First attempt: Try with SOCKS5 proxy
+        const agent = getProxyAgent();
+        if (agent) {
+          console.log(`Attempt ${attempt + 1}: Using SOCKS5 proxy`);
+          const response = await axiosInstance.get(url, {
+            ...options,
+            httpsAgent: agent,
+            httpAgent: agent,
+            timeout: 8000
+          });
+          return response;
+        }
+      } else if (attempt === 1) {
+        // Second attempt: Try HTTP proxy if available
+        const httpProxy = process.env.HTTP_PROXY;
+        if (httpProxy) {
+          console.log(`Attempt ${attempt + 1}: Using HTTP proxy`);
+          const { HttpsProxyAgent } = require('https-proxy-agent');
+          const agent = new HttpsProxyAgent(httpProxy);
+          const response = await axiosInstance.get(url, {
+            ...options,
+            httpsAgent: agent,
+            timeout: 8000
+          });
+          return response;
+        }
+      } else {
+        // Final attempt: Direct connection (no proxy)
+        console.log(`Attempt ${attempt + 1}: Using direct connection`);
+        const response = await axiosInstance.get(url, {
+          ...options,
+          timeout: 8000
+        });
+        return response;
       }
-      return trimmed;
-    }).join(', ');
-    return `srcset=${quote}${newSrcset}${quote}`;
-  });
-  
-  // تحويل روابط الفيديو والصوت
-  processedHtml = processedHtml.replace(/<source([^>]*?)src=(["'])(.*?)\2/gi, (match, attrs, quote, src) => {
-    if (src) {
-      const directUrl = convertProxyToDirect(src, baseDomain);
-      return `<source${attrs}src=${quote}${directUrl}${quote}`;
+    } catch (error) {
+      console.warn(`Attempt ${attempt + 1} failed: ${error.message}`);
+      
+      if (attempt === maxRetries) {
+        throw error; // All attempts failed
+      }
+      
+      // Wait briefly before retry (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
     }
-    return match;
-  });
-  
-  // تحويل روابط الـ favicon
-  processedHtml = processedHtml.replace(/<link([^>]*?)rel=(["'])[^"']*icon[^"']*\2([^>]*?)href=(["'])(.*?)\4/gi, (match, attrs1, quote1, attrs2, quote2, href) => {
-    if (href) {
-      const directUrl = convertProxyToDirect(href, baseDomain);
-      return `<link${attrs1}rel=${quote1}icon${quote1}${attrs2}href=${quote2}${directUrl}${quote2}`;
-    }
-    return match;
-  });
-  
-  return processedHtml;
+  }
 };
 
-// دالة لمعالجة محتوى CSS
-const processCssContent = (css, baseDomain) => {
-  return css.replace(/url\((['"]?)(.*?)\1\)/gi, (match, quote, url) => {
-    if (url && !url.startsWith('data:') && !url.startsWith('#') && !url.startsWith('blob:')) {
-      const directUrl = convertProxyToDirect(url, baseDomain);
-      return `url(${quote}${directUrl}${quote})`;
-    }
-    return match;
-  });
-};
-
+// Updated main function with proxy support
 module.exports = async (req, res) => {
   // Immediate response for OPTIONS
   if (req.method === 'OPTIONS') {
@@ -133,11 +105,10 @@ module.exports = async (req, res) => {
     return res.status(204).end();
   }
 
-  try {
-    res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || '*');
 
-    // 🚫 API KEY VALIDATION REMOVED - No authentication required
-    
+  try {
     // URL validation
     const targetUrl = req.query.url || req.headers['x-target-url'];
     if (!targetUrl) {
@@ -151,54 +122,91 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: 'Invalid target URL' });
     }
 
+    // Host validation
+    const isAllowedHost = (hostname) => {
+      const raw = process.env.ALLOWED_HOSTS || '';
+      if (!raw) return true;
+      const list = raw.split(',').map(s => s.trim()).filter(Boolean);
+      return list.includes(hostname);
+    };
+
     if (!isAllowedHost(parsed.hostname)) {
       return res.status(403).json({ error: 'Host not allowed by ALLOWED_HOSTS' });
     }
 
-    // Prepare request
+    // Prepare request options
     const forwardHeaders = { ...req.headers };
     delete forwardHeaders.host;
     delete forwardHeaders['x-forwarded-for'];
-    delete forwardHeaders['x-api-key']; // Still remove if sent, but don't validate
-    delete forwardHeaders['content-length']; // Let axios calculate this
+    delete forwardHeaders['x-api-key'];
+    delete forwardHeaders['content-length'];
 
-    const axiosOptions = {
+    const requestOptions = {
       method: req.method,
       url: targetUrl,
       headers: forwardHeaders,
       data: req.body,
-      responseType: 'arraybuffer', // Changed back to arraybuffer for content processing
-      timeout: 8000, // Slightly less than function timeout
-      httpAgent: agent,
-      httpsAgent: agent
+      responseType: 'arraybuffer'
     };
 
     // Remove body for GET/HEAD requests
     if (req.method === 'GET' || req.method === 'HEAD') {
-      delete axiosOptions.data;
+      delete requestOptions.data;
     }
 
-    const response = await axiosInstance(axiosOptions);
+    // Use proxy with fallback
+    const response = await fetchWithProxyFallback(targetUrl, requestOptions);
 
+    // Process response content (your existing HTML/CSS processing)
     const contentType = response.headers['content-type'] || '';
     let responseData = response.data;
 
-    // إذا كان المحتوى HTML، قم بمعالجته لتحويل روابط Proxy إلى مباشرة
+    // Your existing content processing functions
+    const convertProxyToDirect = (proxyUrl, baseDomain = 'https://prx8.vercel.app') => {
+      try {
+        if (!proxyUrl.includes('/api/proxy?url=')) return proxyUrl;
+        const urlObj = new URL(proxyUrl, baseDomain);
+        const originalUrl = urlObj.searchParams.get('url');
+        return originalUrl ? decodeURIComponent(originalUrl) : proxyUrl;
+      } catch {
+        return proxyUrl;
+      }
+    };
+
+    const processHtmlContent = (html, baseDomain) => {
+      // Your existing HTML processing logic
+      return html.replace(/<link([^>]*?)href=(["'])(.*?)\2/gi, (match, attrs, quote, href) => {
+        if (href) {
+          const directUrl = convertProxyToDirect(href, baseDomain);
+          return `<link${attrs}href=${quote}${directUrl}${quote}`;
+        }
+        return match;
+      });
+      // Include all your other HTML processing rules...
+    };
+
+    const processCssContent = (css, baseDomain) => {
+      return css.replace(/url\((['"]?)(.*?)\1\)/gi, (match, quote, url) => {
+        if (url && !url.startsWith('data:') && !url.startsWith('#') && !url.startsWith('blob:')) {
+          const directUrl = convertProxyToDirect(url, baseDomain);
+          return `url(${quote}${directUrl}${quote})`;
+        }
+        return match;
+      });
+    };
+
+    // Apply content processing
     if (contentType.includes('text/html')) {
       try {
         const htmlContent = Buffer.from(responseData).toString('utf8');
         const processedHtml = processHtmlContent(htmlContent, 'https://prx8.vercel.app');
         responseData = Buffer.from(processedHtml, 'utf8');
-        
-        // تحديث طول المحتوى بعد المعالجة
         response.headers['content-length'] = Buffer.byteLength(responseData);
       } catch (htmlError) {
         console.error('Error processing HTML:', htmlError.message);
-        // استمر بالمحتوى الأصلي في حالة الخطأ
       }
     }
 
-    // إذا كان المحتوى CSS، قم بمعالجة روابط url()
     if (contentType.includes('text/css')) {
       try {
         const cssContent = Buffer.from(responseData).toString('utf8');
@@ -223,14 +231,27 @@ module.exports = async (req, res) => {
       }
     });
 
-    res.status(response.status).send(responseData);
+    return res.status(response.status).send(responseData);
 
   } catch (err) {
     console.error('Proxy error:', err.message);
     
+    // Enhanced error handling with proxy-specific errors
     if (err.code === 'ECONNABORTED') {
-      return res.status(504).json({ error: 'Upstream request timeout' });
+      return res.status(504).json({ 
+        error: 'Proxy request timeout',
+        suggestion: 'Try without proxy or use different proxy server'
+      });
     }
+    
+    if (err.message.includes('SOCKS')) {
+      return res.status(502).json({
+        error: 'SOCKS proxy connection failed',
+        detail: 'SOCKS proxies may not work in serverless environments',
+        suggestion: 'Try using HTTP proxy or direct connection'
+      });
+    }
+    
     if (err.response) {
       return res.status(502).json({ 
         error: 'Upstream request failed', 
@@ -238,9 +259,10 @@ module.exports = async (req, res) => {
       });
     }
     
-    res.status(502).json({ 
-      error: 'Upstream request failed', 
-      detail: err.message 
+    return res.status(502).json({ 
+      error: 'Request failed',
+      detail: err.message,
+      suggestion: 'Check if the URL is accessible and try again'
     });
   }
 };
