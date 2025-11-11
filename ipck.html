@@ -13,20 +13,9 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         
-        :root {
-            --primary: #4361ee;
-            --secondary: #3a0ca3;
-            --accent: #4cc9f0;
-            --light: #f8f9fa;
-            --dark: #212529;
-            --success: #4ade80;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-        }
-        
         body {
             background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
-            color: var(--light);
+            color: #fff;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -35,7 +24,7 @@
         }
         
         .container {
-            max-width: 1000px;
+            max-width: 800px;
             width: 100%;
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
@@ -63,19 +52,20 @@
             margin: 0 auto 1.5rem;
         }
         
-        .api-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 0.5rem 1rem;
-            border-radius: 50px;
-            font-size: 0.9rem;
-            margin-bottom: 1rem;
+        .api-info {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
         }
         
-        .api-badge i {
-            color: var(--accent);
+        .api-info p {
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
         }
         
         .cards-container {
@@ -107,7 +97,7 @@
         .card-header i {
             font-size: 1.5rem;
             margin-right: 0.8rem;
-            color: var(--accent);
+            color: #fdbb2d;
         }
         
         .card-header h2 {
@@ -140,20 +130,7 @@
             padding: 0.5rem;
             background: rgba(0, 0, 0, 0.2);
             border-radius: 8px;
-            min-height: 2.5rem;
-            display: flex;
-            align-items: center;
-        }
-        
-        .ip-display {
-            font-size: 1.8rem;
-            font-weight: 700;
-            text-align: center;
-            padding: 1rem;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
-            margin: 1rem 0;
-            border: 2px solid var(--accent);
+            min-height: 20px;
         }
         
         .map-container {
@@ -161,7 +138,7 @@
             border-radius: 10px;
             overflow: hidden;
             margin-top: 1rem;
-            background: var(--secondary);
+            background: #1a2a6c;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -188,8 +165,8 @@
         }
         
         button {
-            background: var(--primary);
-            color: white;
+            background: #fdbb2d;
+            color: #1a2a6c;
             border: none;
             padding: 0.8rem 1.5rem;
             border-radius: 50px;
@@ -203,7 +180,7 @@
         }
         
         button:hover {
-            background: var(--secondary);
+            background: #ffcc44;
             transform: scale(1.05);
         }
         
@@ -230,6 +207,15 @@
             to { transform: rotate(360deg); }
         }
         
+        .error-message {
+            color: #ff6b6b;
+            text-align: center;
+            padding: 1rem;
+            background: rgba(255, 107, 107, 0.1);
+            border-radius: 10px;
+            margin-top: 1rem;
+        }
+        
         footer {
             margin-top: 2rem;
             text-align: center;
@@ -251,8 +237,13 @@
                 grid-template-columns: 1fr;
             }
             
-            .ip-display {
-                font-size: 1.5rem;
+            .buttons {
+                flex-direction: column;
+            }
+            
+            button {
+                width: 100%;
+                justify-content: center;
             }
         }
     </style>
@@ -261,15 +252,11 @@
     <div class="container">
         <header>
             <h1>IP & Geo Location Checker</h1>
-            <p class="subtitle">Discover your IP address and geographical information using the ipify API</p>
+            <p class="subtitle">Discover your IP address and geographical information in real-time</p>
             
-            <div class="api-badge">
-                <i class="fas fa-wifi"></i>
-                <span>Powered by ipify.org API</span>
-            </div>
-            
-            <div class="ip-display" id="ip-display">
-                <span class="loader"></span> Detecting your IP address...
+            <div class="api-info">
+                <p><i class="fas fa-info-circle"></i> Using <strong>ipify.org</strong> to fetch your IP address</p>
+                <p><i class="fas fa-info-circle"></i> Using <strong>ipapi.co</strong> to get location data</p>
             </div>
         </header>
         
@@ -382,6 +369,8 @@
             </div>
         </div>
         
+        <div id="error-container"></div>
+        
         <div class="buttons">
             <button id="refresh-btn">
                 <i class="fas fa-sync-alt"></i> Refresh Data
@@ -396,12 +385,11 @@
     </div>
     
     <footer>
-        <p>Your privacy is important - we don't store any of your data. IP address provided by ipify.org API.</p>
+        <p>Your privacy is important - we don't store any of your data. All information is retrieved in real-time from external APIs.</p>
     </footer>
 
     <script>
         // DOM Elements
-        const ipDisplayElement = document.getElementById('ip-display');
         const ipAddressElement = document.getElementById('ip-address');
         const ipVersionElement = document.getElementById('ip-version');
         const countryElement = document.getElementById('country');
@@ -418,15 +406,11 @@
         const refreshButton = document.getElementById('refresh-btn');
         const copyIpButton = document.getElementById('copy-ip-btn');
         const detailsButton = document.getElementById('details-btn');
-        
-        // API endpoints
-        const IPIFY_API = 'https://api.ipify.org?format=json';
-        const IPAPI_API = 'https://ipapi.co/json/';
+        const errorContainer = document.getElementById('error-container');
         
         // Function to set loading state
         function setLoadingState() {
-            ipDisplayElement.innerHTML = '<span class="loader"></span> Detecting your IP address...';
-            ipAddressElement.textContent = 'Detecting...';
+            ipAddressElement.innerHTML = '<span class="loader"></span> Detecting...';
             ipVersionElement.textContent = 'Detecting...';
             countryElement.textContent = 'Detecting...';
             regionElement.textContent = 'Detecting...';
@@ -439,158 +423,116 @@
             currencyElement.textContent = 'Detecting...';
             coordinatesElement.textContent = 'Detecting...';
             mapCoordinatesElement.textContent = 'Detecting...';
+            
+            // Clear any previous errors
+            errorContainer.innerHTML = '';
         }
         
-        // Function to fetch IP from ipify
+        // Function to show error message
+        function showError(message) {
+            errorContainer.innerHTML = `<div class="error-message"><i class="fas fa-exclamation-triangle"></i> ${message}</div>`;
+        }
+        
+        // Function to fetch IP from ipify.org
         async function fetchIPFromIpify() {
             try {
-                const response = await fetch(IPIFY_API);
-                const data = await response.json();
-                
-                if (data && data.ip) {
-                    ipDisplayElement.textContent = data.ip;
-                    ipAddressElement.textContent = data.ip;
-                    return data.ip;
-                } else {
-                    throw new Error('No IP address received from ipify');
+                const response = await fetch('https://api.ipify.org?format=json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
+                const data = await response.json();
+                return data.ip;
             } catch (error) {
-                console.error('Error fetching from ipify:', error);
-                throw error;
+                console.error('Error fetching IP from ipify:', error);
+                throw new Error('Failed to fetch IP address from ipify.org');
             }
         }
         
-        // Function to fetch location data from ipapi
-        async function fetchLocationFromIpapi(ip) {
+        // Function to fetch geo location data from ipapi.co
+        async function fetchGeoLocation(ip) {
             try {
-                // If we have an IP from ipify, use it to get location data
-                const apiUrl = ip ? `ttps://api.allorigins.win/raw?url=https://ipapi.co/${ip}/json/` : IPAPI_API;
-                const response = await fetch(apiUrl);
+                const response = await fetch(`https://api.allorigins.win/raw?url=https://ipapi.co/${ip}/json/`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
                 
-                // Update the UI with the received data
-                ipVersionElement.textContent = data.version || 'IPv4/IPv6';
-                countryElement.textContent = data.country_name || 'Not available';
-                regionElement.textContent = data.region || 'Not available';
-                cityElement.textContent = data.city || 'Not available';
-                timezoneElement.textContent = data.timezone || 'Not available';
-                ispElement.textContent = data.org || 'Not available';
-                asnElement.textContent = data.asn || 'Not available';
-                postalElement.textContent = data.postal || 'Not available';
-                languagesElement.textContent = data.languages || 'Not available';
-                currencyElement.textContent = data.currency || 'Not available';
+                // Check if the API returned an error
+                if (data.error) {
+                    throw new Error(data.reason || 'Unknown error from ipapi.co');
+                }
                 
-                if (data.latitude && data.longitude) {
-                    coordinatesElement.textContent = `${data.latitude}, ${data.longitude}`;
-                    mapCoordinatesElement.textContent = `${data.latitude}, ${data.longitude}`;
+                return data;
+            } catch (error) {
+                console.error('Error fetching geo location:', error);
+                throw new Error('Failed to fetch location data from ipapi.co');
+            }
+        }
+        
+        // Main function to fetch and display IP and location data
+        async function fetchIPAndLocationData() {
+            setLoadingState();
+            
+            try {
+                // Step 1: Get IP from ipify.org
+                const ip = await fetchIPFromIpify();
+                ipAddressElement.textContent = ip;
+                
+                // Step 2: Get location data using the IP
+                const locationData = await fetchGeoLocation(ip);
+                
+                // Update the UI with the received data
+                ipVersionElement.textContent = locationData.version || 'IPv4/IPv6';
+                countryElement.textContent = locationData.country_name || 'Not available';
+                regionElement.textContent = locationData.region || 'Not available';
+                cityElement.textContent = locationData.city || 'Not available';
+                timezoneElement.textContent = locationData.timezone || 'Not available';
+                ispElement.textContent = locationData.org || 'Not available';
+                asnElement.textContent = locationData.asn || 'Not available';
+                postalElement.textContent = locationData.postal || 'Not available';
+                languagesElement.textContent = locationData.languages || 'Not available';
+                currencyElement.textContent = locationData.currency || 'Not available';
+                
+                if (locationData.latitude && locationData.longitude) {
+                    coordinatesElement.textContent = `${locationData.latitude}, ${locationData.longitude}`;
+                    mapCoordinatesElement.textContent = `${locationData.latitude}, ${locationData.longitude}`;
                 } else {
                     coordinatesElement.textContent = 'Not available';
                     mapCoordinatesElement.textContent = 'Not available';
                 }
                 
-                return true;
             } catch (error) {
-                console.error('Error fetching from ipapi:', error);
-                return false;
+                console.error('Error in main function:', error);
+                showError(error.message);
+                
+                // Set fallback data
+                setFallbackData();
             }
         }
         
-        // Function to fetch all IP data
-        async function fetchIPData() {
-            setLoadingState();
-            
-            try {
-                // First get IP from ipify
-                const ip = await fetchIPFromIpify();
-                
-                // Then get location data from ipapi
-                const locationSuccess = await fetchLocationFromIpapi(ip);
-                
-                if (!locationSuccess) {
-                    // If ipapi fails, set sample location data
-                    setSampleLocationData();
-                }
-            } catch (error) {
-                console.error('Error fetching IP data:', error);
-                
-                // If ipify fails, try to get both IP and location from ipapi
-                try {
-                    const response = await fetch(IPAPI_API);
-                    const data = await response.json();
-                    
-                    if (data && data.ip) {
-                        ipDisplayElement.textContent = data.ip;
-                        ipAddressElement.textContent = data.ip;
-                        ipVersionElement.textContent = data.version || 'IPv4/IPv6';
-                        countryElement.textContent = data.country_name || 'Not available';
-                        regionElement.textContent = data.region || 'Not available';
-                        cityElement.textContent = data.city || 'Not available';
-                        timezoneElement.textContent = data.timezone || 'Not available';
-                        ispElement.textContent = data.org || 'Not available';
-                        asnElement.textContent = data.asn || 'Not available';
-                        postalElement.textContent = data.postal || 'Not available';
-                        languagesElement.textContent = data.languages || 'Not available';
-                        currencyElement.textContent = data.currency || 'Not available';
-                        
-                        if (data.latitude && data.longitude) {
-                            coordinatesElement.textContent = `${data.latitude}, ${data.longitude}`;
-                            mapCoordinatesElement.textContent = `${data.latitude}, ${data.longitude}`;
-                        }
-                    } else {
-                        throw new Error('No data received from fallback API');
-                    }
-                } catch (fallbackError) {
-                    console.error('Error with fallback API:', fallbackError);
-                    // Final fallback - set sample data
-                    setSampleData();
-                }
-            }
-        }
-        
-        // Set sample location data (when IP is available but location API fails)
-        function setSampleLocationData() {
-            ipVersionElement.textContent = 'IPv4';
-            countryElement.textContent = 'Information unavailable';
-            regionElement.textContent = 'Information unavailable';
-            cityElement.textContent = 'Information unavailable';
-            timezoneElement.textContent = 'Information unavailable';
-            ispElement.textContent = 'Information unavailable';
-            asnElement.textContent = 'Information unavailable';
-            postalElement.textContent = 'Information unavailable';
-            languagesElement.textContent = 'Information unavailable';
-            currencyElement.textContent = 'Information unavailable';
-            coordinatesElement.textContent = 'Information unavailable';
-            mapCoordinatesElement.textContent = 'Information unavailable';
-            
-            alert('Unable to fetch location data. Your IP address is displayed above.');
-        }
-        
-        // Set complete sample data (when all APIs fail)
-        function setSampleData() {
-            ipDisplayElement.textContent = '192.168.1.1';
-            ipAddressElement.textContent = '192.168.1.1';
-            ipVersionElement.textContent = 'IPv4';
-            countryElement.textContent = 'United States';
-            regionElement.textContent = 'California';
-            cityElement.textContent = 'San Francisco';
-            timezoneElement.textContent = 'America/Los_Angeles';
-            ispElement.textContent = 'Example ISP';
-            asnElement.textContent = 'AS1234 Example Network';
-            postalElement.textContent = '94105';
-            languagesElement.textContent = 'English';
-            currencyElement.textContent = 'USD';
-            coordinatesElement.textContent = '37.7749, -122.4194';
-            mapCoordinatesElement.textContent = '37.7749, -122.4194';
-            
-            alert('Unable to fetch real data. Showing sample data instead.');
+        // Set fallback data in case of API failure
+        function setFallbackData() {
+            ipAddressElement.textContent = 'Unable to fetch';
+            ipVersionElement.textContent = 'Not available';
+            countryElement.textContent = 'Not available';
+            regionElement.textContent = 'Not available';
+            cityElement.textContent = 'Not available';
+            timezoneElement.textContent = 'Not available';
+            ispElement.textContent = 'Not available';
+            asnElement.textContent = 'Not available';
+            postalElement.textContent = 'Not available';
+            languagesElement.textContent = 'Not available';
+            currencyElement.textContent = 'Not available';
+            coordinatesElement.textContent = 'Not available';
+            mapCoordinatesElement.textContent = 'Not available';
         }
         
         // Copy IP address to clipboard
         function copyIPToClipboard() {
-            const ip = ipDisplayElement.textContent;
+            const ip = ipAddressElement.textContent;
             
             // Check if the IP is valid (not in loading/error state)
-            if (ip && ip !== 'Detecting...' && !ip.includes('loader')) {
+            if (ip && ip !== 'Detecting...' && ip !== 'Unable to fetch' && !ip.includes('loader')) {
                 navigator.clipboard.writeText(ip).then(() => {
                     // Visual feedback
                     const originalText = copyIpButton.innerHTML;
@@ -601,29 +543,25 @@
                     }, 2000);
                 }).catch(err => {
                     console.error('Failed to copy IP: ', err);
-                    alert('Failed to copy IP address to clipboard');
+                    showError('Failed to copy IP address to clipboard');
                 });
             } else {
-                alert('IP address not available yet');
+                showError('IP address not available yet');
             }
         }
         
         // Show detailed report
         function showDetailedReport() {
-            const ip = ipDisplayElement.textContent;
-            const country = countryElement.textContent;
-            const city = cityElement.textContent;
-            
-            alert(`Detailed IP Report:\n\nIP Address: ${ip}\nCountry: ${country}\nCity: ${city}\n\nAdditional details would be available with a premium API subscription.`);
+            alert('Detailed report feature would be implemented here. This could include:\n\n- Historical IP data\n- Network security information\n- Connection speed details\n- Geolocation accuracy metrics');
         }
         
         // Event listeners
-        refreshButton.addEventListener('click', fetchIPData);
+        refreshButton.addEventListener('click', fetchIPAndLocationData);
         copyIpButton.addEventListener('click', copyIPToClipboard);
         detailsButton.addEventListener('click', showDetailedReport);
         
         // Initialize the page
-        document.addEventListener('DOMContentLoaded', fetchIPData);
+        document.addEventListener('DOMContentLoaded', fetchIPAndLocationData);
     </script>
 </body>
 </html>
