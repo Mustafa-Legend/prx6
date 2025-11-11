@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP & Geo Location Checker</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin-top: 2rem;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .card-header i {
+            font-size: 1.5rem;
+            margin-right: 0.8rem;
+            color: #fdbb2d;
+        }
+        
+        .card-header h2 {
+            font-size: 1.5rem;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .info-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-bottom: 0.3rem;
+        }
+        
+        .info-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            word-break: break-all;
+        }
+        
+        .map-container {
+            height: 200px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 1rem;
+            background: #1a2a6c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .map-placeholder {
+            text-align: center;
+            padding: 1rem;
+        }
+        
+        .map-placeholder i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.7;
+        }
+        
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        
+        button {
+            background: #fdbb2d;
+            color: #1a2a6c;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        button:hover {
+            background: #ffcc44;
+            transform: scale(1.05);
+        }
+        
+        button.secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+        
+        button.secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        footer {
+            margin-top: 2rem;
+            text-align: center;
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 1.5rem;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>IP & Geo Location Checker</h1>
+            <p class="subtitle">Discover your IP address and geographical information</p>
+        </header>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-network-wired"></i>
+                <h2>Your IP Address</h2>
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Public IP Address</span>
+                    <span class="info-value" id="ip-address">Detecting...</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">IP Version</span>
+                    <span class="info-value" id="ip-version">Detecting...</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-globe-americas"></i>
+                <h2>Geographical Information</h2>
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Country</span>
+                    <span class="info-value" id="country">Detecting...</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Region</span>
+                    <span class="info-value" id="region">Detecting...</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">City</span>
+                    <span class="info-value" id="city">Detecting...</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Timezone</span>
+                    <span class="info-value" id="timezone">Detecting...</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">ISP</span>
+                    <span class="info-value" id="isp">Detecting...</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Coordinates</span>
+                    <span class="info-value" id="coordinates">Detecting...</span>
+                </div>
+            </div>
+            
+            <div class="map-container">
+                <div class="map-placeholder">
+                    <i class="fas fa-map-marked-alt"></i>
+                    <p>Location map would appear here with API integration</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="buttons">
+            <button id="refresh-btn">
+                <i class="fas fa-sync-alt"></i> Refresh Data
+            </button>
+            <button class="secondary" id="copy-ip-btn">
+                <i class="fas fa-copy"></i> Copy IP Address
+            </button>
+        </div>
+    </div>
+    
+    <footer>
+        <p>Your privacy is important - we don't store any of your data</p>
+    </footer>
+
+    <script>
+        // DOM Elements
+        const ipAddressElement = document.getElementById('ip-address');
+        const ipVersionElement = document.getElementById('ip-version');
+        const countryElement = document.getElementById('country');
+        const regionElement = document.getElementById('region');
+        const cityElement = document.getElementById('city');
+        const timezoneElement = document.getElementById('timezone');
+        const ispElement = document.getElementById('isp');
+        const coordinatesElement = document.getElementById('coordinates');
+        const refreshButton = document.getElementById('refresh-btn');
+        const copyIpButton = document.getElementById('copy-ip-btn');
+        
+        // Function to fetch IP and location data
+        async function fetchIPData() {
+            try {
+                // Show loading state
+                ipAddressElement.innerHTML = '<span class="loader"></span> Detecting...';
+                ipVersionElement.textContent = 'Detecting...';
+                countryElement.textContent = 'Detecting...';
+                regionElement.textContent = 'Detecting...';
+                cityElement.textContent = 'Detecting...';
+                timezoneElement.textContent = 'Detecting...';
+                ispElement.textContent = 'Detecting...';
+                coordinatesElement.textContent = 'Detecting...';
+                
+                // Fetch IP data from ipapi.co
+                const response = await fetch('https://ipapi.co/json/');
+                const data = await response.json();
+                
+                // Update the UI with the received data
+                ipAddressElement.textContent = data.ip || 'Not available';
+                ipVersionElement.textContent = data.version || 'IPv4/IPv6';
+                countryElement.textContent = data.country_name || 'Not available';
+                regionElement.textContent = data.region || 'Not available';
+                cityElement.textContent = data.city || 'Not available';
+                timezoneElement.textContent = data.timezone || 'Not available';
+                ispElement.textContent = data.org || 'Not available';
+                
+                if (data.latitude && data.longitude) {
+                    coordinatesElement.textContent = `${data.latitude}, ${data.longitude}`;
+                } else {
+                    coordinatesElement.textContent = 'Not available';
+                }
+                
+            } catch (error) {
+                console.error('Error fetching IP data:', error);
+                
+                // Fallback data in case of API failure
+                ipAddressElement.textContent = '192.168.1.1';
+                ipVersionElement.textContent = 'IPv4';
+                countryElement.textContent = 'United States';
+                regionElement.textContent = 'California';
+                cityElement.textContent = 'San Francisco';
+                timezoneElement.textContent = 'America/Los_Angeles';
+                ispElement.textContent = 'Example ISP';
+                coordinatesElement.textContent = '37.7749, -122.4194';
+                
+                alert('Unable to fetch real location data. Showing sample data instead.');
+            }
+        }
+        
+        // Copy IP address to clipboard
+        function copyIPToClipboard() {
+            const ip = ipAddressElement.textContent;
+            
+            // Check if the IP is valid (not in loading/error state)
+            if (ip && ip !== 'Detecting...' && !ip.includes('loader')) {
+                navigator.clipboard.writeText(ip).then(() => {
+                    // Visual feedback
+                    const originalText = copyIpButton.innerHTML;
+                    copyIpButton.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                    
+                    setTimeout(() => {
+                        copyIpButton.innerHTML = originalText;
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy IP: ', err);
+                    alert('Failed to copy IP address to clipboard');
+                });
+            } else {
+                alert('IP address not available yet');
+            }
+        }
+        
+        // Event listeners
+        refreshButton.addEventListener('click', fetchIPData);
+        copyIpButton.addEventListener('click', copyIPToClipboard);
+        
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', fetchIPData);
+    </script>
+</body>
+</html>
